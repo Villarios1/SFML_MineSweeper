@@ -1,5 +1,6 @@
 #pragma once
 #include "Field.h"
+
 class MineSweeper : public Field
 {
 	const int m_minesCount; // количество мин
@@ -29,4 +30,3 @@ public:
 
 	const int getMines() const { return m_minesCount; }
 };
-

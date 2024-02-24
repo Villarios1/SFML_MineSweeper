@@ -1,9 +1,10 @@
 #include <SFML/Graphics.hpp>
 #include "MineSweeper.h"
 #include <iostream>
+#include "FieldState.h"
 
 // Проверка поля и отрисовка
-void drawAll(MineSweeper& ms, sf::RenderWindow& window, sf::Texture& texture, sf::Sprite& sprite, const bool bombSpotted, const bool left_prev_pressed)
+void drawAll(MineSweeper& ms, sf::RenderWindow& window, sf::Sprite& sprite, FieldState& fs)
 {
 	// Полная проверка и отрисовка поля
 	bool unopenedCell = false;
@@ -12,7 +13,7 @@ void drawAll(MineSweeper& ms, sf::RenderWindow& window, sf::Texture& texture, sf
 	for (int w = 0; w < ms.getCells(); w++)
 		for (int h = 0; h < ms.getCells(); h++)
 		{
-			if (bombSpotted && ms.getLogic()[w][h] == MineSweeper::BOMB && ms[w][h] != MineSweeper::EXPLODED)
+			if (fs.bombSpotted && ms.getLogic()[w][h] == MineSweeper::BOMB && ms[w][h] != MineSweeper::EXPLODED)
 				ms[w][h] = ms.getLogic()[w][h]; // если была открыта мина - открываем все мины
 			else if (!unopenedCell) // иначе пока не найдем неоткрытую клетку или не пройдем поле до конца
 			{
@@ -33,43 +34,12 @@ void drawAll(MineSweeper& ms, sf::RenderWindow& window, sf::Texture& texture, sf
 		}
 
 	// Итог игры
-	if (bombSpotted)
+	if (fs.bombSpotted)
 		std::cout << "LOSE!\n";
-	else if (flagsPlaced == ms.getMines() && openedCells + flagsPlaced == ms.getCells() * ms.getCells() && left_prev_pressed == false)
+	else if (flagsPlaced == ms.getMines() && openedCells + flagsPlaced == ms.getCells() * ms.getCells() && fs.left_prev_pressed == false)
 		std::cout << "WIN!\n";
 
 	window.display(); // обновление окна
-}
-
-struct SurroundCells // Данные об окружающих клетках // Это класс уже
-{
-	std::vector<std::pair<int, int>> coords; // координаты неопознанных окружающих клеток
-	SurroundCells() { coords.reserve(9); } // задаем потенциальный размер
-	bool resSur = true; // восстнавить окружающие клетки после переезда мыши на другую клетку, или просто очистить записи о них?
-
-	int flagCounter = 0; // количество флагов в окружающих клетках
-
-	bool sameCell = false; // Если мы находимся на той же клетке - не нужно обновлять записи от перемещения по ней
-};
-
-struct PreviousCell	// Данные о прошлой клетке
-{
-	std::pair<int, int> сoords{ -1, -1 }; // координаты прошлой клетки - для её восстановления при перемещении мыши с зажатой для ЛКМ
-	int value; // и её значение - для ЛКМ
-};
-
-// Восстанавливает окружающие клетки и очищает записи о них чтобы при сдвиге с клетки не открывались клетки, подсвеченные в прошлом
-void restoreSur(MineSweeper& ms, SurroundCells& sc)
-{
-	if (sc.resSur) // Если открыли клетки - их не нужно восстанавливать
-		for (int i = 0; i < sc.coords.size(); ++i)
-			ms[sc.coords[i].first][sc.coords[i].second] = MineSweeper::UNOPENED; // восстанавливаем подсвеченные клетки
-
-	if (!sc.coords.empty()) // массив заполняется только при двойном зажатии на цифре
-		sc.coords.clear(); // очищаем координаты подсвеченных клеток
-	sc.resSur = true;
-	sc.flagCounter = 0;
-	sc.sameCell = false;
 }
 
 void play()
@@ -80,16 +50,7 @@ void play()
 	texture.loadFromFile("MineSweeper.jpg");
 	sf::Sprite sprite(texture);
 
-	// Двойное нажатие:
-	SurroundCells sc; // Данные об окружающих клетках
-	bool doublePress = false; // для двойного отжатия
-
-	// Перемещение зажатой мыши по полю:
-	PreviousCell pc; // Данные о прошлой клетке
-	bool left_prev_pressed = false; // зажата ли ЛКМ еще с прошлой клетки? - чтобы не/восстанавливалась прошлая клетка
-
-	bool firstClick = true; // это первое открытие клетки - для расстановки бомб. Первое открытие всегда безопасно
-	bool bombSpotted = false; // бомба еще не открыта
+	FieldState fs; // данные о прошлой и окружающих клетках, состоянии мыши, первого нажатия и открытой бомбы
 
 	sf::Event event;
 	while (window.waitEvent(event)) // ивент - нажатие клавиши или смещение мыши
@@ -105,43 +66,45 @@ void play()
 		{
 			if (event.mouseButton.button == sf::Mouse::Left) // отпуск ЛКМ
 			{
-				if (firstClick)
+				if (fs.firstClick)
 				{
 					ms.placeBombs(mX, mY);
 					ms.putNumbers();
-					firstClick = false;
+					fs.firstClick = false;
 				}
 				ms[mX][mY] = ms.getLogic()[mX][mY]; // присваиваем отображению внутреннее значение
 				if (ms[mX][mY] == MineSweeper::BOMB) // если от нажатия мыши была открыта мина
 				{
 					ms[mX][mY] = MineSweeper::EXPLODED;
-					bombSpotted = true;
+					fs.bombSpotted = true;
 				}
 				else if (ms[mX][mY] == MineSweeper::EMPTY) // если нажатая клетка пустая
 					ms.openUp(mX, mY); // автоматически открываем пустые клетки
 
-				left_prev_pressed = false; // помечаем что ЛКМ отпущена
+				fs.left_prev_pressed = false; // помечаем что ЛКМ отпущена
 			}
 
-			if (doublePress == true && bombSpotted == false) // Отпуск кнопки после даблклика
+			if (fs.doublePress == true && fs.bombSpotted == false) // Отпуск кнопки после даблклика
 			{
-				if (sc.flagCounter == ms[mX][mY]) // Если количество флажков рядом равно цифре на которой находится мышь
+				if (fs.sc.m_flagCounter == ms[mX][mY]) // Если количество флажков рядом равно цифре на которой находится мышь
 				{
-					for (int i = 0; i < sc.coords.size(); ++i) // открываем окружающие клетки
+					for (int i = 0; i < fs.sc.m_coords.size(); ++i) // открываем окружающие клетки
 					{
-						ms[sc.coords[i].first][sc.coords[i].second] = ms.getLogic()[sc.coords[i].first][sc.coords[i].second];
-						if (ms[sc.coords[i].first][sc.coords[i].second] == MineSweeper::BOMB) // открыли мину?
+						int x = fs.sc.m_coords[i].first;
+						int y = fs.sc.m_coords[i].second;
+						ms[x][y] = ms.getLogic()[x][y];
+						if (ms[x][y] == MineSweeper::BOMB) // открыли мину?
 						{
-							ms[sc.coords[i].first][sc.coords[i].second] = MineSweeper::EXPLODED;
-							bombSpotted = true;
+							ms[x][y] = MineSweeper::EXPLODED;
+							fs.bombSpotted = true;
 						}
-						if (ms[sc.coords[i].first][sc.coords[i].second] == MineSweeper::EMPTY) // если открыли пустую клетку
-							ms.openUp(sc.coords[i].first, sc.coords[i].second); // запускаем поиск других пустых клеток
+						if (ms[x][y] == MineSweeper::EMPTY) // если открыли пустую клетку
+							ms.openUp(x, y); // запускаем поиск других пустых клеток
 					}
-					sc.resSur = false; // Мы открыли клетки - не нужно их восстанавливать
+					fs.sc.m_resSur = false; // Мы открыли клетки - не нужно их восстанавливать
 				}
-				restoreSur(ms, sc); // восстановление окружающих клеток и очистка их данных
-				doublePress = false; // помечаем что даблклика нет
+				fs.sc.restoreSur(ms); // восстановление окружающих клеток и очистка их данных
+				fs.doublePress = false; // помечаем что даблклика нет
 			}
 			else if (event.mouseButton.button == sf::Mouse::Right) // Отпуск ПКМ без даблклика
 			{
@@ -155,24 +118,24 @@ void play()
 		else if (sf::Mouse::isButtonPressed(sf::Mouse::Left)) // Зажатие кнопки/-ок мыши
 		{
 			// Если мышь сместилась с клетки:
-			if (pc.сoords.first != mX || pc.сoords.second != mY)
+			if (fs.pc.сoords.first != mX || fs.pc.сoords.second != mY)
 			{
 				// Если двойное зажатие - восстанавливаем окружающие клетки
 				if (sf::Mouse::isButtonPressed(sf::Mouse::Right))
-					restoreSur(ms, sc);
+					fs.sc.restoreSur(ms);
 
 				// Восстанавливаем прошлую клетку
-				if (left_prev_pressed == true) // с зажатой ЛКМ в прошлой клетке
+				if (fs.left_prev_pressed == true) // с зажатой ЛКМ в прошлой клетке
 				{
-					if (pc.value == MineSweeper::UNOPENED || pc.value == MineSweeper::FLAG) // и её нужно восстановить
-						ms[pc.сoords.first][pc.сoords.second] = pc.value;
+					if (fs.pc.value == MineSweeper::UNOPENED || fs.pc.value == MineSweeper::FLAG) // и её нужно восстановить
+						ms[fs.pc.сoords.first][fs.pc.сoords.second] = fs.pc.value;
 				}
 				else // иначе помечаем что в этой клетке мы её зажали
-					left_prev_pressed = true;
+					fs.left_prev_pressed = true;
 
 				// Запоминаем новую (текущую) клетку
-				pc.value = ms[mX][mY]; // что в ней лежит
-				pc.сoords = { mX, mY }; // и её координаты
+				fs.pc.value = ms[mX][mY]; // что в ней лежит
+				fs.pc.сoords = { mX, mY }; // и её координаты
 			}
 
 			// Подсветка клетки от зажатия ЛКМ
@@ -182,10 +145,10 @@ void play()
 			// Подсветка окружающих клеток если обе кнопки мыши зажаты на цифре
 			if (sf::Mouse::isButtonPressed(sf::Mouse::Right)
 				&& ms[mX][mY] >= MineSweeper::ONE && ms[mX][mY] <= MineSweeper::EIGHT
-				&& !sc.sameCell) // не перевызывать эту ф от перемещения мыши внутри одной клетки
+				&& !fs.sc.m_sameCell) // не перевызывать эту ф от перемещения мыши внутри одной клетки
 			{
-				sc.sameCell = true;
-				doublePress = true; // помечаем что нажаты обе кнопки
+				fs.sc.m_sameCell = true;
+				fs.doublePress = true; // помечаем что нажаты обе кнопки
 				for (int x = mX - 1; x <= mX + 1; ++x)	// из 8 клеток вокруг (+1 своя)
 					for (int y = mY - 1; y <= mY + 1; ++y)
 						if (x >= 0 && x < ms.getCells() && y >= 0 && y < ms.getCells())
@@ -193,10 +156,10 @@ void play()
 							if (ms[x][y] == MineSweeper::UNOPENED)
 							{
 								ms[x][y] = MineSweeper::EMPTY; // подсвечиваем неопознанные как открытые
-								sc.coords.push_back({ x, y }); // записываем координаты этих клеток
+								fs.sc.m_coords.push_back({ x, y }); // записываем координаты этих клеток
 							}
 							else if (ms[x][y] == MineSweeper::FLAG) // и количество флагов вокруг
-								++sc.flagCounter;
+								++fs.sc.m_flagCounter;
 						}
 			}
 		}
@@ -204,11 +167,11 @@ void play()
 			window.close();
 
 		// Проверка поля и отрисовка
-		drawAll(ms, window, texture, sprite, bombSpotted, left_prev_pressed);
+		drawAll(ms, window, sprite, fs);
 	}
 }
 
-int main() // TO DO: restart, timer, локальная запись рекордов, уровни сложности, ширина поля отдельно от высоты
+int main() // TO DO: отрисовка результата игры, restart, timer, локальная запись рекордов, уровни сложности, ширина поля отдельно от высоты
 {
 	play();
 

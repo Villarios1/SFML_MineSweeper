@@ -38,7 +38,6 @@ x64/
 Debug/
 Release/
 binaries/
-*.sin
 *.vcxproj
 *.sln
 *.filters
